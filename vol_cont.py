@@ -17,6 +17,9 @@ mp_drawing = mp.solutions.drawing_utils
 # For calculating FPS
 previous_time = 0
 
+# Defaults to False
+volume_control_enabled = False
+
 # Read the frames and process each frame which the hand gestures
 while True:
     ret, frame = capture.read()
@@ -35,8 +38,37 @@ while True:
     # To recognize if there is hand landmarks in the processed image
     # Check if mediapipe detected some gestures
     if results.multi_hand_landmarks:
+        # For every hands landmarks in the camera
         for hand_landmarks in results.multi_hand_landmarks:
+            # Draw the hand landmarks
             mp_drawing.draw_landmarks(frame, hand_landmarks, mp_hands.HAND_CONNECTIONS)
+
+            # Set the volume-controlling point (tip of index finger) and the base point that they need to cross 
+            # ".y" at the end indicates that is it using the y-coordinates
+            # The screen works in a set of top-left coordinate (0, 0), normalized to frame height, not pixel coordinates
+            #   - Top: 0
+            #   - Bottom: 1
+            #   - Left: 0
+            #   - Right: 1
+            controller_point_1_y = hand_landmarks.landmark[mp_hands.HandLandmark.INDEX_FINGER_TIP].y 
+            controller_point_2_y = hand_landmarks.landmark[mp_hands.HandLandmark.MIDDLE_FINGER_TIP].y
+            base_point_1_y = hand_landmarks.landmark[mp_hands.HandLandmark.INDEX_FINGER_PIP].y
+            base_point_2_y = hand_landmarks.landmark[mp_hands.HandLandmark.MIDDLE_FINGER_PIP].y
+            
+            # Logic for gestures using coordinates
+            if volume_control_enabled:
+                if controller_point_1_y < base_point_1_y and controller_point_2_y < base_point_2_y:
+                    hand_gesture = "pointing up"
+                elif controller_point_1_y > base_point_1_y and controller_point_2_y > base_point_2_y:
+                    hand_gesture = "pointing down"
+                else:
+                    hand_gesture = "others"
+
+                # Use .press() from pyautogui module to send a virtual key press from the OS
+                if hand_gesture == "pointing up":
+                    pyautogui.press("volumeup")
+                elif hand_gesture == "pointing down":
+                    pyautogui.press("volumedown")
 
     # Calculate FPS
     current_time = time.time() # Returns the current time in seconds as a float
@@ -54,6 +86,7 @@ while True:
 
     # Code for camera window popup, showing webcam feed
     # cv2.imshow("Name", "frame of webcam")
+    # cv2.imshow() must be called after modifying the frame, or else changes wont appear
     cv2.imshow("Hand Tracking", frame)
 
     # Keeps the window responsive and check for key presses, press q to quit program
@@ -62,11 +95,19 @@ while True:
     #   - returns ASCII code of key pressed
     #   - "1ms" also lets OpenCV refresh the window. Without waitKey, the window will freeze or not appear
     # & 0xFF:
+    #   - 0xFF is hexadecimal for 11111111 in binary
+    #   - The bitwise AND operator "&" compares each bit
     #   - Ensures compability across platforms by keeping only the last 8 bits of the key code.
     #   - Needed on some systems for correct key detection.
+    key = cv2.waitKey(1) & 0xFF
+    # volume_control_enabled (False initially) will be not (False), which will become True
+    # "volume_control_enabled = not volume_control_enabled" switches volume_control_enabled between True and False
+    #   - if "v" key is pressed, it starts switching
+    if key == ord('v'):
+        volume_control_enabled = not volume_control_enabled
     # ord('q'):
     #   - Converts the character 'q' to its ASCII value
-    if cv2.waitKey(1) & 0xFF == ord('q'):
+    elif key == ord('q'):
         break
 
 # Release camera and close windows after loop ends
